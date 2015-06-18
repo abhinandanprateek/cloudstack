@@ -1,0 +1,223 @@
+diff --git a/client/WEB-INF/classes/resources/messages.properties b/client/WEB-INF/classes/resources/messages.properties
+index 523c7cc..e9b8c5c 100644
+--- a/client/WEB-INF/classes/resources/messages.properties
++++ b/client/WEB-INF/classes/resources/messages.properties
+@@ -26,6 +26,7 @@ label.remove.ldap=Remove LDAP
+ label.configure.ldap=Configure LDAP
+ label.ldap.configuration=LDAP Configuration
+ label.ldap.port=LDAP port
++label.quota.configuration=Quota Mappings
+ label.create.nfs.secondary.staging.store=Create NFS secondary staging store
+ label.volatile=Volatile
+ label.planner.mode=Planner mode
+diff --git a/client/pom.xml b/client/pom.xml
+index db9d384..83c52ca 100644
+--- a/client/pom.xml
++++ b/client/pom.xml
+@@ -356,6 +356,11 @@
+       <artifactId>cloud-plugin-network-globodns</artifactId>
+       <version>${project.version}</version>
+     </dependency>
++    <dependency>
++      <groupId>org.apache.cloudstack</groupId>
++      <artifactId>cloud-plugin-database-quota</artifactId>
++      <version>${project.version}</version>
++    </dependency>
+   </dependencies>
+   <build>
+     <plugins>
+diff --git a/client/tomcatconf/commands.properties.in b/client/tomcatconf/commands.properties.in
+index a87d167..9356fc2 100644
+--- a/client/tomcatconf/commands.properties.in
++++ b/client/tomcatconf/commands.properties.in
+@@ -778,3 +778,6 @@ listOpenDaylightControllers=1
+ 
+ ### GloboDNS commands
+ addGloboDnsHost=1
++
++### Quota Service
++listQuotaConfigurations=15
+diff --git a/plugins/database/quota/src/org/apache/cloudstack/api/command/ListQuotaConfigurationsCmd.java b/plugins/database/quota/src/org/apache/cloudstack/api/command/ListQuotaConfigurationsCmd.java
+index 1699de5..53200fa 100644
+--- a/plugins/database/quota/src/org/apache/cloudstack/api/command/ListQuotaConfigurationsCmd.java
++++ b/plugins/database/quota/src/org/apache/cloudstack/api/command/ListQuotaConfigurationsCmd.java
+@@ -45,7 +45,7 @@ public class ListQuotaConfigurationsCmd extends BaseListCmd {
+     @Inject
+     private QuotaManager _quotaManager;
+ 
+-    @Parameter(name = "usgaeType", type = CommandType.STRING, required = false, description = "Usage type of the resource")
++    @Parameter(name = "usageType", type = CommandType.STRING, required = false, description = "Usage type of the resource")
+     private String _usageType;
+ 
+ 
+diff --git a/plugins/pom.xml b/plugins/pom.xml
+index d2aa80e..aa8c51e 100755
+--- a/plugins/pom.xml
++++ b/plugins/pom.xml
+@@ -90,6 +90,7 @@
+     <module>network-elements/internal-loadbalancer</module>
+     <module>network-elements/vxlan</module>
+     <module>network-elements/globodns</module>
++    <module>database/quota</module>
+   </modules>
+ 
+   <dependencies>
+diff --git a/ui/scripts/globalSettings.js b/ui/scripts/globalSettings.js
+index 34d65a2..ad0feca 100644
+--- a/ui/scripts/globalSettings.js
++++ b/ui/scripts/globalSettings.js
+@@ -100,6 +100,154 @@
+                     }
+                 }
+             },
++            quotaConfiguration: {
++                type: 'select',
++                title: 'label.quota.configuration',
++                listView: {
++                    id: 'quota',
++                    label: 'label.quota.configuration',
++                    fields: {
++                        usageType: {
++                            label: 'label.usage.type'
++                        },
++                        usageUnit: {
++                            label: 'label.usgae.unit'
++                        },
++                        currencyValue: {
++                            label: 'label.quota.value'
++                        },
++                        description: {
++                            label: 'label.quota.description'
++                        }
++
++                    },
++                    dataProvider: function(args) {
++                        var data = {};
++                        listViewDataProvider(args, data);
++                        $.ajax({
++                            url: createURL('listQuotaConfigurations'),
++                            data: data,
++                            success: function(json) {
++                                var items = json.quotaconfigurationresponse.QuotaConfiguration;
++                                args.response.success({
++                                    data: items
++                                });
++                            },
++                            error: function(data) {
++                                args.response.error(parseXMLHttpResponse(data));
++                            }
++                        });
++                    },
++                    detailView: {
++                        name: 'label.details',
++                        actions: {
++                            remove: {
++                                label: 'label.remove.quota',
++                                messages: {
++                                    notification: function(args) {
++                                        return 'label.remove.quota';
++                                    },
++                                    confirm: function() {
++                                        return 'message.remove.quota';
++                                    }
++                                },
++                                action: function(args) {
++                                    $.ajax({
++                                        url: createURL("deleteQuotaConfiguration&hostname=" + args.context.quotaConfiguration[0].hostname),
++                                        success: function(json) {
++                                            args.response.success();
++                                        }
++                                    });
++                                    $(window).trigger('cloudStack.fullRefresh');
++                                }
++                            }
++                        },
++                        tabs: {
++                            details: {
++                                title: 'label.quota.configuration',
++                                        fields: [{
++                                         usageType: {
++                                            label: 'label.usage.type'
++                                         },
++                                         usageUnit: {
++                                             label: 'label.usgae.unit'
++                                         },
++                                         currencyValue: {
++                                             label: 'label.quota.value'
++                                         },
++                                         description: {
++                                             label: 'label.quota.description'
++                                         }
++                                }],
++                                dataProvider: function(args) {
++                                    var items = [];
++                                    console.log(args);
++                                    $.ajax({
++                                        url: createURL("listQuotaConfigurations&hostname=" + args.context.quotaConfiguration[0].hostname),
++                                        dataType: "json",
++                                        async: true,
++                                        success: function(json) {
++                                            var item = json.quotaconfigurationresponse.QuotaConfiguration;
++                                            args.response.success({
++                                                data: item[0]
++                                            });
++                                        }
++                                    });
++                                }
++                            }
++                        }
++                    },
++                    actions: {
++                        add: {
++                            label: 'label.configure.quota',
++                            messages: {
++                                confirm: function(args) {
++                                    return 'message.configure.quota';
++                                },
++                                notification: function(args) {
++                                    return 'label.configure.quota';
++                                }
++                            },
++                            createForm: {
++                                title: 'label.configure.quota',
++                                fields: {
++                                    hostname: {
++                                        label: 'label.host.name',
++                                        validation: {
++                                            required: true
++                                        }
++                                    },
++                                    port: {
++                                        label: 'label.port',
++                                        validation: {
++                                            required: true
++                                        }
++                                    }
++                                }
++                            },
++                            action: function(args) {
++                                var array = [];
++                                array.push("&hostname=" + todb(args.data.hostname));
++                                array.push("&port=" + todb(args.data.port));;
++                                $.ajax({
++                                    url: createURL("addQuotaConfiguration" + array.join("")),
++                                    dataType: "json",
++                                    async: true,
++                                    success: function(json) {
++                                        var items = json.quotaconfigurationresponse.QuotaAddConfiguration;
++                                        args.response.success({
++                                            data: items
++                                        });
++                                    },
++                                    error: function(json) {
++                                        args.response.error(parseXMLHttpResponse(json));
++                                    }
++                                });
++                            }
++                        }
++                    }
++                }
++	    },
+             ldapConfiguration: {
+                 type: 'select',
+                 title: 'label.ldap.configuration',
